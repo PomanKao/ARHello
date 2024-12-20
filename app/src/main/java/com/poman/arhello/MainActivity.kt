@@ -1,106 +1,82 @@
 package com.poman.arhello
 
-import android.opengl.GLSurfaceView
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
+import android.view.View
+import android.widget.Button
 import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.google.ar.core.ArCoreApk
-import com.google.ar.core.Config
 import com.google.ar.core.Session
-import com.google.ar.core.exceptions.UnavailableApkTooOldException
-import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException
-import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException
-import com.google.ar.core.exceptions.UnavailableSdkTooOldException
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException
 
-
 class MainActivity : AppCompatActivity() {
-    private var surfaceView: GLSurfaceView? = null
-    private var session: Session? = null
-    private var installRequested = false
 
-    private var renderer: HelloArRenderer? = null  // 添加渲染器變數
+    private lateinit var mArButton: Button
+
+    var mUserRequestedInstall = true
+    private var mSession: Session? = null
+    private val CAMERA_PERMISSION_CODE = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
 
-        surfaceView = findViewById(R.id.surfaceview)
-        surfaceView?.setEGLContextClientVersion(2)
-        surfaceView?.preserveEGLContextOnPause = true
+        mArButton = findViewById(R.id.mArButton)
+
+        maybeEnableArButton()
     }
 
-    private fun configureSession() {
-        val config = Config(session)
-        config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
-        config.focusMode = Config.FocusMode.AUTO
-        // 啟用平面檢測
-        config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
-        session?.configure(config)
+    private fun maybeEnableArButton() {
+        ArCoreApk.getInstance().checkAvailabilityAsync(this) { availability ->
+            if (availability.isSupported) {
+                mArButton.visibility = View.VISIBLE
+                mArButton.isEnabled = true
+            } else {
+                mArButton.visibility = View.INVISIBLE
+                mArButton.isEnabled = false
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
 
-        // 檢查相機權限
-        if (!CameraPermissionHelper.hasCameraPermission(this)) {
-            CameraPermissionHelper.requestCameraPermission(this)
+        // Check camera permission.
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) {
+            requestPermission()
             return
         }
 
-        // 確保AR環境可用並創建Session
+        // Ensure that Google Play Services for AR and ARCore device profile data are
+        // installed and up to date.
         try {
-            if (session == null) {
-                when (ArCoreApk.getInstance().requestInstall(this, !installRequested)) {
+            if (mSession == null) {
+                when (ArCoreApk.getInstance().requestInstall(this, mUserRequestedInstall)) {
+                    ArCoreApk.InstallStatus.INSTALLED -> {
+                        // Success: Safe to create the AR session
+                        mSession = Session(this)
+                    }
                     ArCoreApk.InstallStatus.INSTALL_REQUESTED -> {
-                        installRequested = true
+                        mUserRequestedInstall = false
                         return
                     }
-                    ArCoreApk.InstallStatus.INSTALLED -> {
-                        // 成功，可以創建Session
-                    }
                 }
-
-                // 創建AR Session
-                session = Session(this)
-                configureSession()
-
-                // 創建渲染器並設置
-                renderer = session?.let { HelloArRenderer(this, it) }
-                surfaceView?.setRenderer(renderer)
             }
-        } catch (e: Exception) {
-            handleSessionException(e)
-            return
-        }
-
-        try {
-            session?.resume()
-            surfaceView?.onResume()
-        } catch (e: Exception) {
-            handleSessionException(e)
+        } catch (e: UnavailableUserDeclinedInstallationException) {
+            Toast.makeText(this, "TODO: handle exception" + e, Toast.LENGTH_LONG).show()
             return
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        session?.pause()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        session?.close()
-        session = null
+    private fun requestPermission() {
+        ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
     }
 
     override fun onRequestPermissionsResult(
@@ -109,29 +85,16 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (!CameraPermissionHelper.hasCameraPermission(this)) {
-            Toast.makeText(
-                this,
-                "Camera permission is needed to run this application",
-                Toast.LENGTH_LONG
-            ).show()
-            if (!CameraPermissionHelper.shouldShowRequestPermissionRationale(this)) {
-                // 引導用戶前往設定頁面開啟權限
-                CameraPermissionHelper.launchPermissionSettings(this)
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Camera permission is needed to run this application", Toast.LENGTH_LONG).show()
+            if (!ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.CAMERA)) {
+                val intent = Intent()
+                intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                intent.setData(Uri.fromParts("package", this.packageName, null))
+                startActivity(intent)
             }
             finish()
         }
-    }
-
-    private fun handleSessionException(e: Exception) {
-        val message = when (e) {
-            is UnavailableArcoreNotInstalledException,
-            is UnavailableUserDeclinedInstallationException -> "Please install ARCore"
-            is UnavailableApkTooOldException -> "Please update ARCore"
-            is UnavailableSdkTooOldException -> "Please update this app"
-            is UnavailableDeviceNotCompatibleException -> "This device does not support AR"
-            else -> "Failed to create AR session: $e"
-        }
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 }

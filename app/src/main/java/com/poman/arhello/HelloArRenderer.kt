@@ -9,13 +9,11 @@ import javax.microedition.khronos.opengles.GL10
 
 class HelloArRenderer(val activity: MainActivity, val session: Session) : GLSurfaceView.Renderer {
     private val backgroundRenderer = BackgroundRenderer()
-    private val planeRenderer = PlaneRenderer()
 
     override fun onSurfaceCreated(gl: GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
         // 設置清除色為黑色
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
         backgroundRenderer.createOnGlThread()
-        planeRenderer.createOnGlThread()
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -38,12 +36,6 @@ class HelloArRenderer(val activity: MainActivity, val session: Session) : GLSurf
             val projectionMatrix = FloatArray(16)
             camera.getProjectionMatrix(projectionMatrix, 0, 0.1f, 100.0f)
 
-            // 繪製檢測到的平面
-            for (plane in session.getAllTrackables(Plane::class.java)) {
-                if (plane.trackingState == TrackingState.TRACKING) {
-                    planeRenderer.draw(plane, camera.pose, projectionMatrix)
-                }
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

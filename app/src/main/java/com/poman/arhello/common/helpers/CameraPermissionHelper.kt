@@ -1,4 +1,4 @@
-package com.poman.arhello
+package com.poman.arhello.common.helpers
 
 import android.Manifest
 import android.app.Activity
@@ -10,32 +10,31 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 object CameraPermissionHelper {
-    private const val CAMERA_PERMISSION_CODE = 0x1234  // 使用特定值避免衝突
+    private const val CAMERA_PERMISSION_CODE = 0
     private const val CAMERA_PERMISSION = Manifest.permission.CAMERA
 
-    // 檢查是否有相機權限
+    /** Check to see we have the necessary permissions for this app.  */
     fun hasCameraPermission(activity: Activity): Boolean {
         return ContextCompat.checkSelfPermission(activity, CAMERA_PERMISSION) ==
                 PackageManager.PERMISSION_GRANTED
     }
 
-    // 請求相機權限
+    /** Check to see we have the necessary permissions for this app, and ask for them if we don't.  */
     fun requestCameraPermission(activity: Activity) {
         ActivityCompat.requestPermissions(
             activity, arrayOf(CAMERA_PERMISSION), CAMERA_PERMISSION_CODE)
     }
 
-    // 檢查是否應該顯示權限請求說明
+    /** Check to see if we need to show the rationale for this permission.  */
     fun shouldShowRequestPermissionRationale(activity: Activity): Boolean {
         return ActivityCompat.shouldShowRequestPermissionRationale(activity, CAMERA_PERMISSION)
     }
 
-    // 開啟應用程式設定頁面
+    /** Launch Application Setting to grant permission.  */
     fun launchPermissionSettings(activity: Activity) {
-        val intent = Intent().apply {
-            action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-            data = Uri.fromParts("package", activity.packageName, null)
-        }
+        val intent = Intent()
+        intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        intent.data = Uri.fromParts("package", activity.packageName, null)
         activity.startActivity(intent)
     }
 }
